@@ -12,6 +12,9 @@ import httplib2
 import oauth2client.client
 
 
+DEBUG = False
+
+
 def get_drive_service():
     OAUTH2_SCOPE = 'https://www.googleapis.com/auth/drive'
     CLIENT_SECRETS = 'client_secrets.json'
@@ -101,7 +104,8 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
     if filter is None:
         filter = lambda x: True
 
-    print('Gathering file listings for prefix {}...'.format(current_prefix))
+    if DEBUG:
+        print('Gathering file listings for prefix {}...'.format(current_prefix))
 
     page_token = None
     while True:
@@ -113,13 +117,16 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
             for child in children.get('items', []):
                 item = service.files().get(fileId=child['id']).execute()
                 if item['kind'] == 'drive#file':
+                    is_folder = item['mimeType'] == 'application/vnd.google-apps.folder'
                     if filter(item) and current_prefix[:len(minimum_prefix)] == minimum_prefix:
+                        file_type = 'Folder' if is_folder else 'File'
                         print(
-                            u'File: {} ({}, {})'.format(item['title'], current_prefix, item['id']))
+                            u'{}: {} ({}, {})'.format(file_type, item['title'], current_prefix, item['id']))
                         callback(service, item, current_prefix, **callback_args)
-                    if item['mimeType'] == 'application/vnd.google-apps.folder':
-                        print(u'Folder: {} ({}, {})'.format(item['title'], current_prefix,
-                                                            item['id']))
+                    if is_folder:
+                        if DEBUG:
+                            print(u'Explore: {} ({}, {})'.format(item['title'], current_prefix,
+                                                                item['id']))
                         next_prefix = current_prefix + [item['title']]
                         comparison_length = min(len(next_prefix), len(minimum_prefix))
                         if minimum_prefix[:comparison_length] == next_prefix[:comparison_length]:
