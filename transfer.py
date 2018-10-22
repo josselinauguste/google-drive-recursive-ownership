@@ -89,13 +89,15 @@ def grant_ownership(service, drive_item, prefix, permission_id, show_already_own
 
 
 def process_all_files(service, callback=None, callback_args=None, minimum_prefix=None,
-                      current_prefix=None, folder_id='root'):
+                      current_prefix=None, folder_id='root', filter=None):
     if minimum_prefix is None:
         minimum_prefix = []
     if current_prefix is None:
         current_prefix = []
     if callback_args is None:
         callback_args = []
+    if filter is None:
+        filter = lambda x: True
 
     print('Gathering file listings for prefix {}...'.format(current_prefix))
 
@@ -109,7 +111,7 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
             for child in children.get('items', []):
                 item = service.files().get(fileId=child['id']).execute()
                 if item['kind'] == 'drive#file':
-                    if current_prefix[:len(minimum_prefix)] == minimum_prefix:
+                    if filter(item) and current_prefix[:len(minimum_prefix)] == minimum_prefix:
                         print(
                             u'File: {} ({}, {})'.format(item['title'], current_prefix, item['id']))
                         callback(service, item, current_prefix, **callback_args)
@@ -120,7 +122,7 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
                         comparison_length = min(len(next_prefix), len(minimum_prefix))
                         if minimum_prefix[:comparison_length] == next_prefix[:comparison_length]:
                             process_all_files(service, callback, callback_args, minimum_prefix,
-                                              next_prefix, item['id'])
+                                              next_prefix, item['id'], filter=filter)
             page_token = children.get('nextPageToken')
             if not page_token:
                 break
@@ -129,16 +131,17 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
             break
 
 
+def is_owned_by(user):
+    def filter(item):
+        return reduce(lambda a, u: a or u['emailAddress'] == user, item['owners'], False)
+    return filter
+
+
 if __name__ == '__main__':
-    if sys.version_info[0] > 2:
-        minimum_prefix = sys.argv[1]
-        new_owner = sys.argv[2]
-        show_already_owned = False if len(sys.argv) > 3 and sys.argv[3] == 'false' else True
-    else:
-        minimum_prefix = sys.argv[1].decode('utf-8')
-        new_owner = sys.argv[2].decode('utf-8')
-        show_already_owned = False if len(sys.argv) > 3 and sys.argv[3].decode(
-            'utf-8') == 'false' else True
+    minimum_prefix = sys.argv[1].decode('utf-8')
+    previous_owner = sys.argv[2].decode('utf-8')
+    new_owner = sys.argv[3].decode('utf-8')
+    show_already_owned = len(sys.argv) > 4 and sys.argv[4].decode('utf-8') == 'true'
     print('Changing all files at path "{}" to owner "{}"'.format(minimum_prefix, new_owner))
     minimum_prefix_split = minimum_prefix.split(os.path.sep)
     print('Prefix: {}'.format(minimum_prefix_split))
@@ -147,4 +150,4 @@ if __name__ == '__main__':
     print('User {} is permission ID {}.'.format(new_owner, permission_id))
     process_all_files(service, grant_ownership,
                       {'permission_id': permission_id, 'show_already_owned': show_already_owned},
-                      minimum_prefix_split)
+                      minimum_prefix_split, filter=is_owned_by(previous_owner))
