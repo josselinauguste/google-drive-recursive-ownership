@@ -3,6 +3,7 @@
 import os
 import pprint
 import sys
+import urllib
 
 import googleapiclient.discovery
 import googleapiclient.errors
@@ -17,7 +18,8 @@ def get_drive_service():
     flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRETS, OAUTH2_SCOPE)
     flow.redirect_uri = oauth2client.client.OOB_CALLBACK_URN
     authorize_url = flow.step1_get_authorize_url()
-    print('Use this link for authorization: {}'.format(authorize_url))
+    os.system('open "{}"'.format(urllib.unquote(authorize_url)))
+    print('Link for authorization: {}'.format(authorize_url))
     if sys.version_info[0] > 2:
         code = input('Verification code: ').strip()
     else:
