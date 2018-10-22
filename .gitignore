@@ -56,3 +56,5 @@ target/
 # IDE
 .vscode
 .idea
+client_secrets.json
+
