@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import os
-import pprint
 import sys
 import urllib
 
@@ -42,34 +41,7 @@ def get_permission_id_for_email(service, email):
         print('An error occured: {}'.format(e))
 
 
-def show_info(service, drive_item, prefix, permission_id):
-    try:
-        print(os.path.join(prefix, drive_item['title']))
-        print('Would set new owner to {}.'.format(permission_id))
-    except KeyError:
-        print('No title for this item:')
-        pprint.pprint(drive_item)
-
-
-def grant_ownership(service, drive_item, prefix, permission_id, show_already_owned):
-    full_path = os.path.join(os.path.sep.join(prefix), drive_item['title']).encode('utf-8',
-                                                                                   'replace')
-
-    current_user_owns = False
-    for owner in drive_item['owners']:
-        if owner['permissionId'] == permission_id:
-            if show_already_owned:
-                print('Item {} already has the right owner.'.format(full_path))
-            return
-        elif owner['isAuthenticatedUser']:
-            current_user_owns = True
-
-    print('Item {} needs ownership granted.'.format(full_path))
-
-    if not current_user_owns:
-        print('    But, current user does not own the item.'.format(full_path))
-        return
-
+def grant_ownership(service, drive_item, permission_id):
     try:
         permission = service.permissions().get(fileId=drive_item['id'],
                                                permissionId=permission_id).execute()
@@ -93,14 +65,12 @@ def grant_ownership(service, drive_item, prefix, permission_id, show_already_own
         print('An error occurred inserting ownership permissions: {}'.format(e))
 
 
-def process_all_files(service, callback=None, callback_args=None, minimum_prefix=None,
+def process_all_files(service, callback=None, permission_id=None, minimum_prefix=None,
                       current_prefix=None, folder_id='root', filter=None):
     if minimum_prefix is None:
         minimum_prefix = []
     if current_prefix is None:
         current_prefix = []
-    if callback_args is None:
-        callback_args = []
     if filter is None:
         filter = lambda x: True
 
@@ -122,7 +92,7 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
                         file_type = 'Folder' if is_folder else 'File'
                         print(
                             u'{}: {} ({}, {})'.format(file_type, item['title'], current_prefix, item['id']))
-                        callback(service, item, current_prefix, **callback_args)
+                        callback(service, item, permission_id)
                     if is_folder:
                         if DEBUG:
                             print(u'Explore: {} ({}, {})'.format(item['title'], current_prefix,
@@ -130,7 +100,7 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
                         next_prefix = current_prefix + [item['title']]
                         comparison_length = min(len(next_prefix), len(minimum_prefix))
                         if minimum_prefix[:comparison_length] == next_prefix[:comparison_length]:
-                            process_all_files(service, callback, callback_args, minimum_prefix,
+                            process_all_files(service, callback, permission_id, minimum_prefix,
                                               next_prefix, item['id'], filter=filter)
             page_token = children.get('nextPageToken')
             if not page_token:
@@ -150,13 +120,11 @@ if __name__ == '__main__':
     minimum_prefix = sys.argv[1].decode('utf-8')
     previous_owner = sys.argv[2].decode('utf-8')
     new_owner = sys.argv[3].decode('utf-8')
-    show_already_owned = len(sys.argv) > 4 and sys.argv[4].decode('utf-8') == 'true'
     print('Changing all files at path "{}" to owner "{}"'.format(minimum_prefix, new_owner))
     minimum_prefix_split = minimum_prefix.split(os.path.sep)
     print('Prefix: {}'.format(minimum_prefix_split))
     service = get_drive_service()
     permission_id = get_permission_id_for_email(service, new_owner)
     print('User {} is permission ID {}.'.format(new_owner, permission_id))
-    process_all_files(service, grant_ownership,
-                      {'permission_id': permission_id, 'show_already_owned': show_already_owned},
+    process_all_files(service, grant_ownership, permission_id,
                       minimum_prefix_split, filter=is_owned_by(previous_owner))
