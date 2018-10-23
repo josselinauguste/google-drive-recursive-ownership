@@ -65,14 +65,14 @@ def grant_ownership(service, drive_item, permission_id):
         print('An error occurred inserting ownership permissions: {}'.format(e))
 
 
-def process_all_files(service, callback=None, permission_id=None, minimum_prefix=None,
+def process_all_files(service, callback=None, minimum_prefix=None,
                       current_prefix=None, folder_id='root', filter=None):
     if minimum_prefix is None:
         minimum_prefix = []
     if current_prefix is None:
         current_prefix = []
     if filter is None:
-        filter = lambda x: True
+        filter = lambda x, y: True
 
     if DEBUG:
         print('Gathering file listings for prefix {}...'.format(current_prefix))
@@ -88,11 +88,11 @@ def process_all_files(service, callback=None, permission_id=None, minimum_prefix
                 item = service.files().get(fileId=child['id']).execute()
                 if item['kind'] == 'drive#file':
                     is_folder = item['mimeType'] == 'application/vnd.google-apps.folder'
-                    if filter(item) and current_prefix[:len(minimum_prefix)] == minimum_prefix:
+                    if filter(service, item) and current_prefix[:len(minimum_prefix)] == minimum_prefix:
                         file_type = 'Folder' if is_folder else 'File'
                         print(
                             u'{}: {} ({}, {})'.format(file_type, item['title'], current_prefix, item['id']))
-                        callback(service, item, permission_id)
+                        callback(service, item)
                     if is_folder:
                         if DEBUG:
                             print(u'Explore: {} ({}, {})'.format(item['title'], current_prefix,
@@ -100,7 +100,7 @@ def process_all_files(service, callback=None, permission_id=None, minimum_prefix
                         next_prefix = current_prefix + [item['title']]
                         comparison_length = min(len(next_prefix), len(minimum_prefix))
                         if minimum_prefix[:comparison_length] == next_prefix[:comparison_length]:
-                            process_all_files(service, callback, permission_id, minimum_prefix,
+                            process_all_files(service, callback, minimum_prefix,
                                               next_prefix, item['id'], filter=filter)
             page_token = children.get('nextPageToken')
             if not page_token:
@@ -111,9 +111,15 @@ def process_all_files(service, callback=None, permission_id=None, minimum_prefix
 
 
 def is_owned_by(user):
-    def filter(item):
-        return reduce(lambda a, u: a or u['emailAddress'] == user, item['owners'], False)
+    def filter(service, drive_item):
+        return reduce(lambda a, u: a or u['emailAddress'] == user, drive_item['owners'], False)
     return filter
+
+
+def grant_ownership_to(permission_id):
+    def call(service, drive_item):
+        return grant_ownership(service, drive_item, permission_id)
+    return call
 
 
 if __name__ == '__main__':
@@ -126,5 +132,5 @@ if __name__ == '__main__':
     service = get_drive_service()
     permission_id = get_permission_id_for_email(service, new_owner)
     print('User {} is permission ID {}.'.format(new_owner, permission_id))
-    process_all_files(service, grant_ownership, permission_id,
+    process_all_files(service, grant_ownership_to(permission_id),
                       minimum_prefix_split, filter=is_owned_by(previous_owner))
